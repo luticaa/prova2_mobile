@@ -8,82 +8,169 @@ import java.util.List;
 import java.util.Optional;
 
 
-/*CAMADA DE SERVIÇO OU NEGÓCIO - LOGICA DE NEGOCIO*/
+/**
+ * CAMADA DE SERVIÇO (Service Layer)
+ * 
+ * Esta classe contém a lógica de negócio da aplicação, sendo responsável por:
+ * - Validar dados antes de persistir no banco
+ * - Aplicar regras de negócio (validações de ano, preço, etc.)
+ * - Coordenar operações entre Controller e Repository
+ * - Tratar exceções e garantir integridade dos dados
+ * 
+ * O Spring Boot gerencia automaticamente o ciclo de vida desta classe
+ * através da anotação @Service (Injeção de Dependência).
+ */
+@Service
+public class AlbumService {
+    
+    /**
+     * Repositório JPA que abstrai o acesso ao banco de dados.
+     * O JPA gera automaticamente as queries SQL necessárias.
+     * 
+     * Declarado como 'final' para garantir imutabilidade após construção.
+     */
+    private final AlbumRepository albumRepository;
 
-@Service//anotacao para classe pertencer a camada de servicos
-public class AlbumService {//declaracao da classe AlbumService
-    //nosso repositorio JPA realiza todas as querys por baixo dos panos facilitando nossa vida
-    private final AlbumRepository albumRepository; //cria o repositorio, apos construcao imutavel
-
+    /**
+     * Construtor com injeção de dependência.
+     * O Spring Boot automaticamente fornece uma instância de AlbumRepository
+     * quando esta classe é criada (padrão IoC - Inversion of Control).
+     */
     public AlbumService(AlbumRepository albumRepository) {
-        this.albumRepository = albumRepository;//construtor para repositorio, IoC/ID
+        this.albumRepository = albumRepository;
     }
 
+    /**
+     * Lista todos os álbuns cadastrados, ordenados alfabeticamente por banda.
+     * 
+     * @return Lista de álbuns ordenada por nome da banda (A-Z)
+     */
     public List<AlbumModel> listar() {
+        // Sort.by("banda").ascending() ordena os resultados por nome da banda em ordem crescente
         return albumRepository.findAll(Sort.by("banda").ascending());
-        //lista as bandas existentes, sort ascendente no argumento.
     }
 
+    /**
+     * Busca álbuns cujo nome da banda contenha o texto fornecido.
+     * A busca é case-insensitive (ignora maiúsculas/minúsculas).
+     * 
+     * Exemplo: buscarPorBanda("metal") retorna álbuns de "Metallica", "Iron Maiden", etc.
+     * 
+     * @param banda Texto a ser buscado no nome da banda
+     * @return Lista de álbuns que correspondem à busca
+     */
     public List<AlbumModel> buscarPorBanda(String banda) {
+        // findByBandaContainingIgnoreCase é um método customizado do Repository
+        // O Spring Data JPA gera automaticamente a query SQL baseada no nome do método
         return albumRepository.findByBandaContainingIgnoreCase(banda);
-        //busca banda por nome ja trata maiusculas e minusculas
     }
 
+    /**
+     * Busca um álbum específico pelo seu ID.
+     * 
+     * @param id ID do álbum a ser buscado
+     * @return AlbumModel encontrado
+     * @throws RuntimeException se o álbum não for encontrado
+     * 
+     * Nota: Esta exceção pode ocorrer se:
+     * - O usuário digitar manualmente um ID inválido na URL
+     * - O registro foi deletado por outro processo
+     * - O banco de dados foi corrompido externamente
+     */
     public AlbumModel buscarPorId(Long id) {
+        // findById retorna um Optional<AlbumModel>
+        // Optional evita NullPointerException e permite tratamento elegante de valores ausentes
         return albumRepository.findById(id)
-                /*caso nao ache, gera excecao, aqui em funcionamento normal nunca sera lancada essa excecao pois chamamos
-                do botao acoes do proprio album, mas por segunca ainda sim se faz necessario pois um usuario pode digitar
-                manualmente um id na barra de busca ou ainda o banco de dados ter sido corrompido externamente*/
             .orElseThrow(() -> new RuntimeException("album não encontrado com id: " + id));
     }
 
+    /**
+     * Salva um álbum no banco de dados (cria novo ou atualiza existente).
+     * 
+     * Esta função unifica criação e atualização:
+     * - Se album.getId() == null → cria novo registro
+     * - Se album.getId() != null → atualiza registro existente
+     * 
+     * Antes de salvar, realiza validações de regra de negócio:
+     * - Título e banda não podem estar vazios
+     * - Ano deve estar entre 1900 e o ano atual
+     * - Preço deve estar entre 0 e 1000
+     * 
+     * @param album Objeto AlbumModel a ser salvo
+     * @return AlbumModel salvo (com ID preenchido se for novo registro)
+     * @throws IllegalArgumentException se alguma validação falhar
+     */
     public AlbumModel salvar(AlbumModel album) {
+        // Obtém o ano atual para validação
         int anoAtual = Year.now().getValue();
-        //variavel ano vigente
 
-        // Funcao salvar, realiza a atualizacao do album Validações manuais de regra de negócio
+        // ========== VALIDAÇÕES DE REGRA DE NEGÓCIO ==========
+        
+        // Validação: Título não pode ser nulo ou vazio
         if (album.getTitulo() == null || album.getTitulo().isBlank()) {
-            //checa validade do titulo caso contrario recusa
             throw new IllegalArgumentException("O título do álbum não pode ser vazio.");
         }
+        
+        // Validação: Banda não pode ser nula ou vazia
         if (album.getBanda() == null || album.getBanda().isBlank()) {
-            //checa validade do do nome da banda caso contrario recusa
             throw new IllegalArgumentException("O nome da banda não pode ser vazio.");
         }
 
-        if (album.getAno() == null || album.getAno() < 1900 || album.getAno() > anoAtual ) {
-            //checa validade do ano de lançamento caso contrario recusa
+        // Validação: Ano deve estar entre 1900 e o ano atual
+        // Evita anos inválidos como 0, negativos ou futuros
+        if (album.getAno() == null || album.getAno() < 1900 || album.getAno() > anoAtual) {
             throw new IllegalArgumentException("Ano de lançamento inválido.");
         }
-        if (album.getPreco() == null || album.getPreco().doubleValue() < 0 || album.getPreco().doubleValue() > 1000 ) {
-            //checa validade do preco caso contrario recusa
+        
+        // Validação: Preço deve estar entre 0 e 1000
+        // doubleValue() converte BigDecimal para double para comparação
+        if (album.getPreco() == null || album.getPreco().doubleValue() < 0 || album.getPreco().doubleValue() > 1000) {
             throw new IllegalArgumentException("Preço invalido, verifique o valor.");
         }
-        // Se o ID vier preenchido, é atualização; senão, é novo registro
-        if (album.getId() != null) {//se existe um id valido
+
+        // ========== LÓGICA DE CRIAÇÃO/ATUALIZAÇÃO ==========
+        
+        // Se o ID estiver preenchido, é uma atualização
+        if (album.getId() != null) {
+            // Busca o registro existente no banco
             Optional<AlbumModel> existente = albumRepository.findById(album.getId());
-            /*OPTIONAL >>> EXPLICITA para o JPA a validade do id ou nao pois mesmo nao sendo nulo, pode nao ser aceitavel
-            evita NullPointerException caso nao exista um registro com o id fornecido*/
+            
+            // Optional.isPresent() verifica se o registro foi encontrado
+            // Isso evita NullPointerException caso o ID não exista
             if (existente.isPresent()) {
-                // Atualizar dados do existente caso esteja consistente (passou pelo check acima)
+                // Atualiza os campos do registro existente
+                // Mantém a referência do objeto gerenciado pelo JPA (melhor performance)
                 AlbumModel atualizado = existente.get();
                 atualizado.setTitulo(album.getTitulo());
                 atualizado.setBanda(album.getBanda());
-                atualizado.setAno(album.getAno());      //ATUALIZACOES DO OBJETO CORRENTE (EXISTENTE)
+                atualizado.setAno(album.getAno());
                 atualizado.setPreco(album.getPreco());
                 atualizado.setGenero(album.getGenero());
-                return albumRepository.save(atualizado); //RETORNA ATUALIZADO
+                
+                // Salva e retorna o registro atualizado
+                return albumRepository.save(atualizado);
             }
         }
+        
+        // Se chegou aqui, é um novo registro (ID null ou não encontrado)
+        // O JPA automaticamente gera um novo ID ao salvar
         return albumRepository.save(album);
-        /*funcao salvar trabalha sob duas condicoes salvando uma edicao ou salvando um novo, por isso contempla ambos
-        este return é referente ao salvamento de um novo album (caso nao entre no if)*/
     }
 
+    /**
+     * Exclui um álbum do banco de dados pelo seu ID.
+     * 
+     * @param id ID do álbum a ser excluído
+     * @throws RuntimeException se o álbum não for encontrado
+     */
     public void excluir(Long id) {
+        // Verifica se o álbum existe antes de tentar excluir
+        // Isso evita erros silenciosos e fornece mensagem clara ao usuário
         if (!albumRepository.existsById(id)) {
             throw new RuntimeException("album não encontrado com id: " + id);
-        }//funcao excluir tranquila, chama do repositório direto se nao existe, exceção caso exista deleta.
+        }
+        
+        // Se chegou aqui, o álbum existe e pode ser excluído com segurança
         albumRepository.deleteById(id);
     }
 }

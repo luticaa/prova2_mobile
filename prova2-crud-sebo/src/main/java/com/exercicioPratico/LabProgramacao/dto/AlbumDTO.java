@@ -2,6 +2,30 @@ package com.exercicioPratico.LabProgramacao.dto;
 
 import java.math.BigDecimal;
 
+/**
+ * DTO (Data Transfer Object) - Objeto de Transferência de Dados
+ * 
+ * Esta classe é usada para transferir dados entre o backend e o frontend.
+ * 
+ * Por que usar DTO ao invés de retornar AlbumModel diretamente?
+ * 
+ * 1. Segurança:
+ *    - Evita expor detalhes internos da entidade JPA
+ *    - Permite controlar quais campos são enviados ao cliente
+ * 
+ * 2. Performance:
+ *    - DTOs são mais leves (sem anotações JPA, sem lazy loading)
+ *    - Reduz overhead de serialização JSON
+ * 
+ * 3. Desacoplamento:
+ *    - Frontend não depende da estrutura interna do banco
+ *    - Facilita mudanças na entidade sem quebrar a API
+ * 
+ * 4. Versionamento:
+ *    - Permite diferentes versões da API com diferentes DTOs
+ * 
+ * Fluxo: AlbumModel (entidade) → AlbumDTO (transferência) → JSON → Frontend
+ */
 public class AlbumDTO {
     private Long id;
     private String titulo;
@@ -10,9 +34,24 @@ public class AlbumDTO {
     private String genero;
     private BigDecimal preco;
     
-    // Construtores, getters e setters
+    /**
+     * Construtor padrão (sem argumentos).
+     * Necessário para frameworks de serialização JSON (Jackson, Gson, etc.)
+     * que precisam instanciar objetos vazios e preencher via setters.
+     */
     public AlbumDTO() {}
     
+    /**
+     * Construtor completo com todos os campos.
+     * Útil para criar DTOs a partir de AlbumModel no Controller.
+     * 
+     * @param id ID único do álbum
+     * @param titulo Título do álbum
+     * @param banda Nome da banda
+     * @param ano Ano de lançamento
+     * @param genero Gênero musical
+     * @param preco Preço em reais
+     */
     public AlbumDTO(Long id, String titulo, String banda, Integer ano, String genero, BigDecimal preco) {
         this.id = id;
         this.titulo = titulo;
